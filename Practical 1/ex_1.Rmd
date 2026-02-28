@@ -1,0 +1,302 @@
+---
+title: "R Notebook"
+output: "pdf_document"
+---
+Authors: Leonel Fernando Nabaza Ruibal and Michael Jiménez González
+
+# Exercise 1: Preprocessing and multivariate analysis
+In this first exercise we are going to work with a real datasets 
+(*Palmer Penguins or the Penguin Data*) in order to put into practice the 
+concepts and techniques explained in the theory class about preprocessing.
+
+The work **must** be done in pairs.
+
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+list.of.packages = c(
+  "ggplot2", 
+  "outliers", 
+  "readr", 
+  "mvoutlier", 
+  "chemometrics", 
+  "adamethods", 
+  "DMwR2", 
+  "dplyr",
+  "patchwork",
+  "Rlof", 
+  "solitude",
+  "tidyverse",
+  "palmerpenguins",
+  "missForest",
+  "mice"
+  ) 
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages) > 0) {
+  install.packages(new.packages)
+}
+lapply(list.of.packages, require, character.only = T)
+rm(list.of.packages, new.packages)
+```
+
+The dataset will be simplified a bit.
+```{r}
+data("penguins")
+?penguins
+
+cols <- c("species", "bill_length_mm", "bill_depth_mm", "flipper_length_mm", 
+          "body_mass_g", "sex")
+df <- penguins %>% 
+  select(cols)
+
+df_clean <- df %>% 
+  select(-species) %>% 
+  drop_na()
+
+n <- nrow(df_clean) # Number of observations
+p <- ncol(df_clean) # Number of variables
+```
+
+## Encoding
+**Q1: Transform the *sex* variable so it can be used in the analysis.**
+```{r}
+# transform de the sex variable so it can be used int he analysis
+df_clean <- df_clean %>% 
+  mutate(sex = ifelse(sex == "male", 1, 0))
+```
+
+## Outliers analysis
+Using the **df_clean** dataframe answer the following questions. Focus on the
+variables *Flipper length* and *Bill length* for all the analyses.
+
+**Q2: Use the Local Outlier Factor method (with $k=20$) and identify the top 
+five outliers using the quantile $97.5\%$ tp find the score threshold**.
+Generate a scatter plot to display the dataset, highlighting any observations 
+classified as outliers.**
+```{r}
+lof_scores <- lof(df_clean %>% select(bill_length_mm, flipper_length_mm), k = 20)
+threshold <- quantile(lof_scores, 0.975)
+outliers <- which(lof_scores > threshold)
+ggplot(df_clean, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_clean[outliers, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with Outliers Highlighted")
+```
+**Q3: Use the Isolation Tree algorithm with $100$ trees and identify the top 
+five outliers. Use the quantile $97.5\%$ to find the score threshold**
+Generate a scatter plot to display the dataset, highlighting any observations 
+classified as outliers.**
+```{r}
+iso_model <- isolationForest$new(num_trees = 100)
+iso_model$fit(df_clean %>% select(bill_length_mm, flipper_length_mm))
+iso_scores <- iso_model$predict(df_clean %>% select(bill_length_mm, flipper_length_mm))$anomaly_score
+threshold_iso <- quantile(iso_scores, 0.975)
+outliers_iso <- which(iso_scores > threshold_iso)
+ggplot(df_clean, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_clean[outliers_iso, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with Isolation Forest Outliers Highlighted")
+```
+**Q4: From the previous results, which observations can be considered outliers?
+Why? Discuss what actions should be taken regarding them**
+```{r}
+# The observations that can be considered outliers are those that have been identified by both methods
+outliers_final <- intersect(outliers, outliers_iso)
+# These observations are considered outliers because they have high scores in both methods. The measures that do not belong to the intersection could be considered "not too out" for our procedures, since they have just high values and are relatively close the cloud of other data points. There a few outliers that we'd be eliminating that clearly have high leverage (they are far from the cloud of points) so it's necessary to eliminate them. The other outliers that we are eliminating, since they are not that far from the rest of the data and we have many observations, we are not loosing significant amount of information.
+# plot the points of the intersection
+ggplot(df_clean, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_clean[outliers_final, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with Final Outliers Highlighted")
+```
+## Missing values analysis
+Now using the `df` dataframe, answer the following questions:
+
+**Q5: Are there missing values? How we classify them (MCAR; MAR; MNAR)?
+Quantify the quality of the data using the missing values.**
+
+Yes, there are two types of missing values. There are some observations where absolutely no information exists (all columns are null) and there are some observations where the column sex is missing. The first type of missing values can be classified as MCAR, since the fact that they are missing is completely random and does not depend on any other variable. The second type of missing values can be classified as MAR, the missingness is related to observed data but not the missing values themselves.
+
+
+**Q6: Perform a k-NN Imputation and a MICE imputation. Compare 
+them. Which imputation has better quality? Why?**
+
+*Hint*: I provide code for the plots. Store the k-NN imputation 
+in a dataframe with name `df_1nn` and the MICE imputation in a dataframe with 
+name `df_mice` in order to perform the plots. 
+Think carefully your answers and check the consistency of the imputations.
+
+```{r}
+#store the k-NN imputation in a dataframe with name df_1nn and the MICE imputation in a dataframe with name df_mice
+# k-NN imputation
+set.seed(123)
+df_1nn <- knnImputation(df %>% select(-species), k = 1)
+
+# MICE imputation
+set.seed(123)
+mice_mod <- mice(df %>% select(-species), m = 1, method = "pmm", maxit = 5)
+df_mice <- complete(mice_mod)
+
+```
+```{r}
+plot_columns <- cols[-c(1,6)]
+
+for (column in plot_columns){
+  comparison_df <- data.frame(
+  KNN_1    = df_1nn[[column]],
+  MICE     = df_mice[[column]]
+  )
+  plot_data <- comparison_df %>%
+    pivot_longer(cols = everything(), names_to = "Method", values_to = "Value")
+  
+  p <- ggplot(plot_data, aes(x = Value, color = Method, fill = Method)) +
+    geom_density(alpha = 0.1, linewidth = 1) +
+    labs(
+      title = "Comparison of Imputation Methods: 
+      Distribution of flipper_length_mm",
+      x = "Value of flipper_length_mm",
+      y = "Density"
+    ) +
+    theme_minimal() +
+    scale_color_brewer(palette = "Set1") +
+    scale_fill_brewer(palette = "Set1")
+  
+  print(p)
+  
+}
+```
+MICE seems to give slightly better results than KNN because its curves are a bit closer to the original distributions in all the plots. With KNN, the distributions look a little more smoothed, which suggests it is averaging values and slightly reducing the variability and the extremes. MICE keeps the peaks, spread and tails a bit better, so it preserves the overall shape of the data more naturally. Both methods work quite similarly, but overall MICE looks like the more reliable option.
+
+```{r}
+subset_knn <- df_1nn %>%
+  select(body_mass_g, sex) %>%
+  mutate(Method = "kNN")
+
+subset_mice <- df_mice %>%
+  select(body_mass_g, sex) %>%
+  mutate(Method = "MICE")
+
+df_comparison <- bind_rows(subset_knn, subset_mice)
+
+df_comparison <- df_comparison %>%
+  mutate(sex = factor(sex, labels = c("Female", "Male")))
+
+ggplot(df_comparison, aes(x = sex, y = body_mass_g, fill = Method)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~ Method) +
+  labs(
+    title = "Comparison of Body Mass by Sex across Imputation Methods",
+    x = "Sex",
+    y = "Body Mass (g)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+## The other way
+**Q7: Using the data frame with imputed data (KNN and MICE), repeat the outlier 
+analysis (steps Q1-Q4). Compare the results of the two approaches: performing 
+outlier analysis on a complete-case dataset (removing NAs) versus imputing 
+missing values before conducting the outlier analysis.**
+
+```{r}
+# kNN data
+lof_scores_knn <- lof(df_1nn %>% select(bill_length_mm, flipper_length_mm), k = 20)
+threshold_knn <- quantile(lof_scores_knn, 0.975)
+outliers_knn <- which(lof_scores_knn > threshold_knn)
+ggplot(df_1nn, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_1nn[outliers_knn, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with kNN Imputed Outliers Highlighted")
+```
+```{r}
+# also the isolation tree algorithm
+iso_model_knn <- isolationForest$new(num_trees = 100)
+iso_model_knn$fit(df_1nn %>% select(bill_length_mm, flipper_length_mm))
+iso_scores_knn <- iso_model_knn$predict(df_1nn %>% select(bill_length_mm, flipper_length_mm))$anomaly_score
+threshold_iso_knn <- quantile(iso_scores_knn, 0.975)
+outliers_iso_knn <- which(iso_scores_knn > threshold_iso_knn)
+ggplot(df_1nn, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_1nn[outliers_iso_knn, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with kNN Imputed Isolation Forest Outliers Highlighted")
+```
+Because they are clearly separated from the bulk of the data, they can be considered true anomalies. They should be investigated for possible data errors, but for modelling and analysis it would be reasonable to remove them, or at least compare results with and without them, since they could distort statistical results and model performance.
+
+Now we perform the same prodecure with the MICE imputed data:
+```{r}
+# MICE data
+lof_scores_mice <- lof(df_mice %>% select(bill_length_mm, flipper_length_mm), k = 20)
+threshold_mice <- quantile(lof_scores_mice, 0.975)
+outliers_mice <- which(lof_scores_mice > threshold_mice)
+ggplot(df_mice, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_mice[outliers_mice, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with MICE Imputed Outliers Highlighted")
+```
+```{r}
+# also the isolation tree algorithm
+iso_model_mice <- isolationForest$new(num_trees = 100)
+iso_model_mice$fit(df_mice %>% select(bill_length_mm, flipper_length_mm))
+iso_scores_mice <- iso_model_mice$predict(df_mice %>% select(bill_length_mm, flipper_length_mm))$anomaly_score
+threshold_iso_mice <- quantile(iso_scores_mice, 0.975)
+outliers_iso_mice <- which(iso_scores_mice > threshold_iso_mice)
+ggplot(df_mice, aes(x = bill_length_mm, y = flipper_length_mm)) +
+  geom_point() +
+  geom_point(data = df_mice[outliers_iso_mice, ], aes(x = bill_length_mm, y = flipper_length_mm), color = "red") +
+  labs(title = "Scatter plot with MICE Imputed Isolation Forest Outliers Highlighted")
+```
+I apply a similar reasoning as before.
+
+
+When comparing both approaches, the overall pattern of outliers is quite similar, but the imputation approach gives more stable and reliable results. With the complete-case dataset, many observations are removed due to missing values, which reduces the sample size and can change the data distribution, so the detected outliers depend on a smaller and potentially biased subset of the data. After imputing the missing values, we keep all observations, the structure of the dataset is preserved, and the Isolation Forest detects outliers in a more consistent way. In practice, this means that performing imputation before outlier detection is preferable, because it uses more information and avoids losing potentially important observations.
+
+
+## Multivariate matrices
+Using the data without missing values (complete cases: `df_clean`) answer the 
+following questions:
+
+**Q8: Compute the sample mean vector $m$, the centring matrix $H$ and the 
+centered data matrix $X_c$. Only matrix and vector operations are allowed.**
+
+```{r}
+# Sample mean vector
+m <- colMeans(df_clean)
+# print
+print(m)
+
+# Centering matrix
+n <- nrow(df_clean)
+H <- diag(n) - (1/n) * matrix(1, n, n)
+#print(H)
+
+# Centered data matrix
+X_c <- H %*% as.matrix(df_clean)
+#print(X_c)
+```
+
+**Q9: Using the centered data matrix compute the sample covariance matrix $S$.
+Only matrix and vector operations are allowed.**
+
+```{r}
+S <- (1/(n-1)) * t(X_c) %*% X_c
+print(S)
+```
+
+
+**Q10: Obtain the standardized data matrix $X_s$ and use it to compute the 
+sample correlation matrix $R$.
+Only matrix and vector operations are allowed.**
+
+```{r}
+# Standardized data matrix
+X_s <- X_c %*% diag(1/sqrt(diag(S)))
+#print(X_s)
+# Sample correlation matrix
+R <- (1/(n-1)) * t(X_s) %*% X_s
+print(R)
+```
+
+
+
+
