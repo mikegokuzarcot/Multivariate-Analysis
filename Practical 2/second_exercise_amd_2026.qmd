@@ -148,7 +148,36 @@ For this exercise, libraries that automate the computation of PCA are permitted:
     cosines <-res.pca$ind$cos2
     ```
 
+    ```{r}
+    scores["Rao's",]
+    contributions["Rao's",]
+    cosines["Rao's",]
+    scores["Gennaro",]
+    contributions["Gennaro",]
+    cosines["Gennaro",]
+
+
+    ```
+
+    The third principal component is mainly associated with the **Price** variable. Rao's has a relatively large score on the third component (−1.47) and a high squared cosine (0.515), indicating that this restaurant is strongly characterized by the third principal component and therefore by the price variable.
+
+    Gennaro also has a relatively large score on PC3 (−1.66), but its squared cosine is higher for the second component (0.467), meaning that its position is more strongly explained by PC2 than by PC3.
+
+    Rao's would have a poor representation if only the first two principal components were used. The sum of its squared cosines for PC1 and PC2 is only about 0.48, which indicates that less than half of its variability is captured in the two-dimensional PCA representation. Therefore, the third component plays an important role in describing this restaurant.
+
 7.  Perform a plot of the variables. What can we say about the principal axes and the variables?
+
+    ```{r}
+    fviz_pca_var(res.pca,
+                 col.var = "black",
+                 repel = TRUE)
+    ```
+
+    The variable plot (correlation circle) shows that all variables have strong positive loadings on the first principal component, which explains 74.9% of the variance. This indicates that the variables Price, Food, Decor and Service are positively correlated. Therefore, the first principal axis represents the overall quality level of the restaurants, where higher prices tend to be associated with better ratings in food, decor and service.
+
+    The second principal axis (14% of the variance) contrasts Decor with Food and Service. Decor has a positive loading on this axis, while Food and Service have negative loadings. This suggests that the second component differentiates restaurants that emphasize decoration from those that emphasize food quality and service.
+
+    The variables Food and Service are very close in the plot, indicating a strong positive correlation between them. All variables are well represented in the PC1–PC2 plane, as their vectors are long and close to the correlation circle.
 
 8.  Perform a plot of the observations. What we can say about the following restaurants:
 
@@ -158,7 +187,18 @@ For this exercise, libraries that automate the computation of PCA are permitted:
 
     3.  Lamarca.
 
-    Remember to use all the information available about the representation in the reduced dimensional space.\
+    Remember to use all the information available about the representation in the reduced dimensional space.
+
+    ```{r}
+    fviz_pca_ind(
+      res.pca,
+      select.ind = list(name = c("Veronica", "Rainbow Grill", "Lamarca")),
+      geom = c("point","text"),
+      repel = TRUE
+    )
+    ```
+
+    The first principal component represents the overall quality of the restaurants, while the second component contrasts decor with food and service. Veronica and Lamarca appear on the negative side of the first principal component, indicating lower values in the main variables such as price, food, decor and service compared with the average. Rainbow Grill is located on the positive side of the first component, suggesting a higher overall quality. In addition, its positive value on the second component indicates a stronger emphasis on decor compared with food and service.\
 
     ```{r}
     #| eval: false
@@ -183,12 +223,18 @@ For this exercise, libraries that automate the computation of PCA are permitted:
     fviz_pca_ind(res2, select.ind = list(cos2=35),habillage = "Location", palette=c("#00AFBB", "#E7B800"), xlim=c(-4,4), ylim=c(-2,2), mean.point=FALSE, repel=TRUE)
     ```
 
+    Restaurants located in the **West** tend to appear on the positive side of the first principal component, which corresponds to higher overall quality, price, and ratings. Many of them also have positive values on the second component, suggesting a stronger emphasis on decoration.
+
+    In contrast, **East** restaurants tend to be located on the negative side of the first component, indicating lower overall scores and prices compared with West restaurants. They are also more frequently associated with negative values of the second component, suggesting a relatively stronger emphasis on food and service rather than decoration.
+
 10. One of your best friends is going to Manhattan and she wants to eat at a restaurant with the following conditions:\
     High food quality.\
     Not caring about the decoration.\
     Good service.\
     Cheap.\
     Which restaurant would you recommend? Justify your answer.
+
+    Based on the PCA plot, the restaurant that best satisfies the desired conditions is **Tony's Di Napoli**. The first principal component represents the overall level of the restaurant, including price. Since the restaurant is located on the negative side of Dim1, it indicates a relatively lower price. The second principal component contrasts decoration with food and service; Tony's Di Napoli lies on the negative side of Dim2, suggesting stronger emphasis on food quality and service rather than decoration. Therefore, this restaurant matches the requirements of good food, good service, low concern for decor, and relatively low price.
 
 ## Factor Analysis
 
